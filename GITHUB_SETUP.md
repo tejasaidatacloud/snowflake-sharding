@@ -15,7 +15,7 @@ Go to https://github.com/new and create a repo named `snowflake-sharding` (publi
 
 ## 3. Push
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/snowflake-sharding.git
+git remote add origin https://github.com/tejasaidatacloud/snowflake-sharding.git
 git branch -M main
 git push -u origin main
 ```
@@ -29,4 +29,4 @@ git push -u origin main
 6. Wait ~2 min → your URL appears at the top (e.g. `https://snowflake-sharding.onrender.com`)
 
 ## 5. Update your LinkedIn post
-Replace `[YOUR_RENDER_URL]` and `[YOUR_USERNAME]` in `linkedin_post.md` with your real URLs.
+Replace `[YOUR_RENDER_URL]` and `[tejasaidatacloud]` in `linkedin_post.md` with your real URLs.

@@ -42,7 +42,7 @@ JavaScript's `Number.MAX_SAFE_INTEGER` is 2⁵³ − 1. Snowflake IDs exceed it.
 ✅ Bulk fake profile generator to stress-test distribution
 
 🔗 Live demo: [YOUR_RENDER_URL]
-⭐ GitHub: https://github.com/YOUR_USERNAME/snowflake-sharding
+⭐ GitHub: https://github.com/tejasaidatacloud/snowflake-sharding
 
 Built with: FastAPI · SQLite · Vanilla JS · Chart.js · Render
 

@@ -144,7 +144,7 @@ For local development and demos, one SQLite file per shard perfectly simulates i
 ## Running Locally
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/snowflake-sharding.git
+git clone https://github.com/tejasaidatacloud/snowflake-sharding.git
 cd snowflake-sharding
 
 python3 -m venv venv
