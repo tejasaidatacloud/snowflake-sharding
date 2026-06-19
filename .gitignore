@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+venv/
+shards/         # auto-generated database files — do not commit
+*.db
+.pytest_cache/
+.DS_Store

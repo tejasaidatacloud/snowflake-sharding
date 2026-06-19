@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>❄️ Snowflake Sharding — Live Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3350;
+    --text: #e8eaf6;
+    --muted: #7b82b4;
+    --accent: #6c8ef7;
+    --accent2: #a78bfa;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --pink: #f472b6;
+    --teal: #2dd4bf;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .topbar-title { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; }
+  .topbar-title span { font-size: 22px; }
+  .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+  .topbar-right { display: flex; align-items: center; gap: 14px; }
+  .total-pill {
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 6px 16px; border-radius: 20px; font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .total-pill strong { color: var(--green); font-size: 17px; }
+  .docs-link { color: var(--accent); font-size: 13px; text-decoration: none; opacity: .8; }
+  .docs-link:hover { opacity: 1; }
+
+  /* ── LAYOUT ── */
+  .layout { display: grid; grid-template-columns: 340px 1fr 300px; gap: 0; height: calc(100vh - 57px); }
+
+  /* ── LEFT PANEL — FORM ── */
+  .left-panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+  .panel-head { padding: 18px 20px 12px; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+
+  .form-card { margin: 0 16px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .form-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; margin-top: 12px; }
+  .form-card label:first-child { margin-top: 0; }
+  .form-card input, .form-card select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 9px 12px; font-size: 14px;
+    outline: none; transition: border-color .2s;
+  }
+  .form-card input:focus, .form-card select:focus { border-color: var(--accent); }
+  .form-card input::placeholder { color: var(--muted); opacity: .6; }
+
+  .btn-primary {
+    width: 100%; margin-top: 16px; padding: 11px; border-radius: 8px;
+    background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
+    border: none; cursor: pointer; transition: opacity .2s, transform .1s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:hover { opacity: .88; }
+  .btn-primary:active { transform: scale(.98); }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+
+  .btn-secondary {
+    width: 100%; margin-top: 8px; padding: 9px; border-radius: 8px;
+    background: transparent; color: var(--muted); font-size: 13px;
+    border: 1px solid var(--border); cursor: pointer; transition: all .2s;
+  }
+  .btn-secondary:hover { background: var(--surface2); color: var(--text); }
+
+  /* ── FLOW ANIMATION ── */
+  .flow-viz {
+    margin: 0 16px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+  .flow-title { font-size: 11px; font-weight: 700; letter-spacing: .07em; color: var(--muted); text-transform: uppercase; margin-bottom: 14px; }
+  .flow-steps { display: flex; align-items: center; gap: 0; }
+  .flow-node {
+    flex: 1; text-align: center; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 6px; font-size: 11px; transition: all .3s;
+    position: relative;
+  }
+  .flow-node.active { border-color: var(--accent); background: rgba(108,142,247,.12); }
+  .flow-node.done { border-color: var(--green); background: rgba(52,211,153,.08); }
+  .flow-node-icon { font-size: 18px; display: block; margin-bottom: 3px; }
+  .flow-node-label { color: var(--muted); font-size: 10px; }
+  .flow-arrow { color: var(--muted); font-size: 14px; padding: 0 4px; flex-shrink: 0; transition: color .3s; }
+  .flow-arrow.active { color: var(--accent); }
+
+  /* ID breakdown */
+  .id-breakdown {
+    margin: 0 16px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; display: none;
+  }
+  .id-breakdown.show { display: block; }
+  .id-breakdown-title { font-size: 11px; font-weight: 700; letter-spacing: .07em; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; }
+  .id-number { font-size: 13px; font-weight: 700; color: var(--accent2); word-break: break-all; margin-bottom: 10px; letter-spacing: .02em; }
+  .id-parts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .id-part { background: var(--surface2); border-radius: 6px; padding: 8px; text-align: center; }
+  .id-part-label { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+  .id-part-value { font-size: 12px; font-weight: 700; }
+  .id-part.ts .id-part-value { color: var(--amber); }
+  .id-part.sh .id-part-value { color: var(--accent); }
+  .id-part.sq .id-part-value { color: var(--green); }
+
+  /* ── CENTER — SHARDS ── */
+  .center-panel { overflow-y: auto; padding: 20px; }
+  .center-panel .panel-head { padding: 0 0 14px; }
+
+  .shard-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+
+  .shard-card {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 12px; padding: 14px; transition: all .35s; position: relative; overflow: hidden;
+  }
+  .shard-card.pulse {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(108,142,247,.2);
+    animation: pulse-anim .6s ease-out;
+  }
+  @keyframes pulse-anim {
+    0% { transform: scale(1.03); }
+    100% { transform: scale(1); }
+  }
+  .shard-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .shard-id { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+  .shard-db { font-size: 10px; color: var(--muted); opacity: .6; }
+  .shard-count { font-size: 28px; font-weight: 800; color: var(--text); line-height: 1; margin-bottom: 4px; transition: color .3s; }
+  .shard-count.bump { color: var(--green); }
+  .shard-label { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .shard-bar-bg { background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; }
+  .shard-bar-fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
+  .shard-size { font-size: 10px; color: var(--muted); margin-top: 6px; text-align: right; }
+
+  /* shard colors */
+  .shard-card:nth-child(1) .shard-bar-fill { background: #6c8ef7; }
+  .shard-card:nth-child(2) .shard-bar-fill { background: #a78bfa; }
+  .shard-card:nth-child(3) .shard-bar-fill { background: #34d399; }
+  .shard-card:nth-child(4) .shard-bar-fill { background: #fbbf24; }
+  .shard-card:nth-child(5) .shard-bar-fill { background: #f472b6; }
+  .shard-card:nth-child(6) .shard-bar-fill { background: #2dd4bf; }
+  .shard-card:nth-child(7) .shard-bar-fill { background: #fb923c; }
+  .shard-card:nth-child(8) .shard-bar-fill { background: #e879f9; }
+
+  .shard-card:nth-child(1) .shard-count { color: #6c8ef7; }
+  .shard-card:nth-child(2) .shard-count { color: #a78bfa; }
+  .shard-card:nth-child(3) .shard-count { color: #34d399; }
+  .shard-card:nth-child(4) .shard-count { color: #fbbf24; }
+  .shard-card:nth-child(5) .shard-count { color: #f472b6; }
+  .shard-card:nth-child(6) .shard-count { color: #2dd4bf; }
+  .shard-card:nth-child(7) .shard-count { color: #fb923c; }
+  .shard-card:nth-child(8) .shard-count { color: #e879f9; }
+
+  /* ── CHART ── */
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px;
+  }
+  .chart-card-title { font-size: 12px; font-weight: 700; letter-spacing: .07em; color: var(--muted); text-transform: uppercase; margin-bottom: 14px; }
+  .chart-wrap { position: relative; height: 180px; }
+
+  /* ── RIGHT PANEL — FEED ── */
+  .right-panel { border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .feed-head { padding: 18px 16px 10px; display: flex; align-items: center; justify-content: space-between; }
+  .feed-head-title { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+  .feed-clear { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; }
+  .feed-clear:hover { color: var(--text); }
+  .feed-list { flex: 1; overflow-y: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .feed-list::-webkit-scrollbar { width: 4px; }
+  .feed-list::-webkit-scrollbar-track { background: transparent; }
+  .feed-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .feed-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font-size: 12px;
+    animation: slideIn .3s ease-out;
+    border-left: 3px solid var(--border);
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .feed-item.success { border-left-color: var(--green); }
+  .feed-item.error { border-left-color: var(--red); }
+  .feed-item.info { border-left-color: var(--accent); }
+
+  .feed-item-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .feed-item-name { font-weight: 700; color: var(--text); }
+  .feed-item-time { font-size: 10px; color: var(--muted); }
+  .feed-item-route { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+  .feed-item-route .arrow { color: var(--accent); margin: 0 3px; }
+  .feed-item-id { font-size: 10px; color: var(--muted); font-family: monospace; word-break: break-all; }
+
+  .shard-chip {
+    display: inline-block; padding: 1px 7px; border-radius: 10px;
+    font-size: 10px; font-weight: 700; color: #fff;
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty-feed {
+    text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px;
+  }
+  .empty-feed-icon { font-size: 32px; margin-bottom: 10px; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 20px; border-radius: 8px; font-size: 13px;
+    z-index: 1000; opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--red); color: var(--red); }
+  .toast.ok { border-color: var(--green); color: var(--green); }
+
+  /* ── SEARCH RESULTS PANEL ── */
+  .search-result {
+    margin: 0 16px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px; display: none;
+  }
+  .search-result.show { display: block; animation: slideIn .3s ease-out; }
+  .search-result-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px; }
+  .search-result-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .search-result-row:last-child { border-bottom: none; }
+  .search-result-key { color: var(--muted); }
+  .search-result-val { color: var(--text); font-weight: 600; font-family: monospace; }
+
+  /* ── BULK BUTTONS ── */
+  .bulk-row { display: flex; gap: 8px; margin: 0 16px 16px; }
+  .bulk-btn {
+    flex: 1; padding: 9px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted); font-size: 12px; cursor: pointer;
+    transition: all .2s;
+  }
+  .bulk-btn:hover { background: var(--surface); color: var(--text); border-color: var(--accent); }
+
+  /* ── FAKE GENERATOR CARD ── */
+  .bulk-card {
+    margin: 0 16px 12px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+  .bulk-card-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+  .bulk-card-desc { font-size: 11px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+  .bulk-input-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .bulk-input-row input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 9px 12px; font-size: 15px;
+    font-weight: 700; outline: none; transition: border-color .2s;
+  }
+  .bulk-input-row input:focus { border-color: var(--accent); }
+  .btn-generate {
+    padding: 9px 16px; border-radius: 8px; background: var(--green); color: #000;
+    font-size: 13px; font-weight: 700; border: none; cursor: pointer;
+    transition: opacity .2s, transform .1s; white-space: nowrap;
+  }
+  .btn-generate:hover { opacity: .88; }
+  .btn-generate:active { transform: scale(.97); }
+  .btn-generate:disabled { opacity: .4; cursor: not-allowed; }
+  .bulk-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .preset-btn {
+    padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted); font-size: 11px; cursor: pointer;
+    transition: all .15s;
+  }
+  .preset-btn:hover { border-color: var(--green); color: var(--green); background: rgba(52,211,153,.08); }
+  .bulk-progress { margin-top: 10px; }
+  .bulk-progress-bar-bg { background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 6px; }
+  .bulk-progress-bar { height: 100%; border-radius: 4px; background: var(--green); transition: width .2s ease; }
+  .bulk-progress-label { font-size: 11px; color: var(--muted); text-align: center; }
+
+  /* ── REVERSE BREAKDOWN ── */
+  .reverse-breakdown {
+    margin: 0 16px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; display: none;
+  }
+  .reverse-breakdown.show { display: block; animation: slideIn .3s ease-out; }
+  .rb-title { font-size: 11px; font-weight: 700; letter-spacing: .07em; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; }
+  .rb-subtitle { font-size: 11px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+  .rb-step { display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start; }
+  .rb-step:last-child { margin-bottom: 0; }
+  .rb-num { min-width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 2px; flex-shrink: 0; }
+  .rb-content { flex: 1; }
+  .rb-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .rb-value { font-size: 12px; font-weight: 700; color: var(--accent2); word-break: break-all; }
+  .rb-code { font-size: 12px; font-family: monospace; background: var(--surface2); padding: 4px 8px; border-radius: 4px; color: var(--text); }
+  .mono { font-family: monospace; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-title">
+    <span>❄️</span> Snowflake Sharding — Live Visualizer
+    <div class="badge">8 SHARDS</div>
+  </div>
+  <div class="topbar-right">
+    <div class="total-pill">Total users: <strong id="total-count">0</strong></div>
+    <a href="/docs" class="docs-link" target="_blank">API Docs ↗</a>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT: FORM + FLOW -->
+  <div class="left-panel">
+    <div class="panel-head">Add User</div>
+
+    <div class="form-card">
+      <label>Username</label>
+      <input type="text" id="f-username" placeholder="e.g. alice_99"/>
+      <label>Email</label>
+      <input type="email" id="f-email" placeholder="alice@example.com"/>
+      <label>Full Name</label>
+      <input type="text" id="f-fullname" placeholder="Alice Smith"/>
+      <label>Region</label>
+      <select id="f-region">
+        <option value="">— select region —</option>
+        <option value="us-east">us-east</option>
+        <option value="us-west">us-west</option>
+        <option value="eu-west">eu-west</option>
+        <option value="ap-south">ap-south</option>
+        <option value="ap-east">ap-east</option>
+      </select>
+      <button class="btn-primary" id="btn-create" onclick="createUser()">
+        ➕ Create User &amp; Watch Routing
+      </button>
+    </div>
+
+    <!-- FAKE PROFILE GENERATOR -->
+    <div class="bulk-card">
+      <div class="bulk-card-title">🧪 Fake Profile Generator</div>
+      <div class="bulk-card-desc">Enter any number and click Generate — the app creates realistic fake users with random names, emails &amp; passwords automatically.</div>
+      <div class="bulk-input-row">
+        <input type="number" id="bulk-count" min="1" max="5000" value="50" placeholder="e.g. 500"/>
+        <button class="btn-generate" id="btn-generate" onclick="bulkCreateCustom()">⚡ Generate</button>
+      </div>
+      <div class="bulk-progress" id="bulk-progress" style="display:none">
+        <div class="bulk-progress-bar-bg">
+          <div class="bulk-progress-bar" id="bulk-progress-bar" style="width:0%"></div>
+        </div>
+        <div class="bulk-progress-label" id="bulk-progress-label">Starting...</div>
+      </div>
+      <div class="bulk-presets">
+        <button class="preset-btn" onclick="setBulkCount(10)">10</button>
+        <button class="preset-btn" onclick="setBulkCount(50)">50</button>
+        <button class="preset-btn" onclick="setBulkCount(100)">100</button>
+        <button class="preset-btn" onclick="setBulkCount(500)">500</button>
+        <button class="preset-btn" onclick="setBulkCount(1000)">1,000</button>
+      </div>
+    </div>
+    <div class="bulk-row">
+      <button class="bulk-btn" onclick="resetAll()">🗑 Reset All Shards</button>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="panel-head" style="padding-top:0">Lookup by ID</div>
+    <div class="form-card" style="margin-bottom:10px">
+      <label>Snowflake User ID</label>
+      <input type="text" id="f-search-id" placeholder="paste a Snowflake ID"/>
+      <button class="btn-primary" style="background:var(--accent2)" onclick="searchUser()">
+        🔍 Route &amp; Fetch
+      </button>
+    </div>
+    <div class="search-result" id="search-result">
+      <div class="search-result-title">User found</div>
+      <div id="search-result-body"></div>
+    </div>
+
+
+    <!-- REVERSE BREAKDOWN PANEL -->
+    <div class="reverse-breakdown" id="reverse-breakdown">
+      <div class="rb-title">🔍 How the router found it</div>
+      <div class="rb-subtitle">Every step the system takes to decode your ID and route to the exact shard — zero lookup tables.</div>
+      <div id="reverse-breakdown-body"></div>
+    </div>
+
+    <!-- FLOW DIAGRAM -->
+    <div class="flow-viz">
+      <div class="flow-title">Routing path</div>
+      <div class="flow-steps">
+        <div class="flow-node" id="fn-source">
+          <span class="flow-node-icon">📡</span>
+          Source
+          <div class="flow-node-label">API request</div>
+        </div>
+        <div class="flow-arrow" id="fa-1">→</div>
+        <div class="flow-node" id="fn-router">
+          <span class="flow-node-icon">⚙️</span>
+          Router
+          <div class="flow-node-label">hash(email)%8</div>
+        </div>
+        <div class="flow-arrow" id="fa-2">→</div>
+        <div class="flow-node" id="fn-shard">
+          <span class="flow-node-icon">🗄️</span>
+          Shard <span id="fn-shard-num">?</span>
+          <div class="flow-node-label">SQLite DB</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ID BREAKDOWN -->
+    <div class="id-breakdown" id="id-breakdown">
+      <div class="id-breakdown-title">❄️ Snowflake ID breakdown</div>
+      <div class="id-number" id="id-number"></div>
+      <div class="id-parts">
+        <div class="id-part ts">
+          <div class="id-part-label">Timestamp (ms)</div>
+          <div class="id-part-value" id="id-ts">—</div>
+        </div>
+        <div class="id-part sh">
+          <div class="id-part-label">Shard ID</div>
+          <div class="id-part-value" id="id-sh">—</div>
+        </div>
+        <div class="id-part sq">
+          <div class="id-part-label">Sequence</div>
+          <div class="id-part-value" id="id-sq">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: SHARDS + CHART -->
+  <div class="center-panel">
+    <div class="panel-head">Shard Servers (8 databases)</div>
+    <div class="shard-grid" id="shard-grid"></div>
+    <div class="chart-card">
+      <div class="chart-card-title">Distribution across shards</div>
+      <div class="chart-wrap">
+        <canvas id="dist-chart" role="img" aria-label="Bar chart showing user count per shard">User distribution across 8 shards.</canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: ACTIVITY FEED -->
+  <div class="right-panel">
+    <div class="feed-head">
+      <div class="feed-head-title">Activity Feed</div>
+      <button class="feed-clear" onclick="clearFeed()">Clear</button>
+    </div>
+    <div class="feed-list" id="feed-list">
+      <div class="empty-feed">
+        <div class="empty-feed-icon">📭</div>
+        Create a user to see<br/>live routing in action
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SHARD_COLORS = ['#6c8ef7','#a78bfa','#34d399','#fbbf24','#f472b6','#2dd4bf','#fb923c','#e879f9'];
+let shardData = Array(8).fill(null).map((_,i)=>({shard_id:i,user_count:0,db_size_kb:0}));
+let chart = null;
+let feedEmpty = true;
+
+// ── BUILD SHARD CARDS ────────────────────────────────────────────────────────
+function buildShards() {
+  const grid = document.getElementById('shard-grid');
+  grid.innerHTML = '';
+  shardData.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'shard-card';
+    card.id = `shard-${s.shard_id}`;
+    card.innerHTML = `
+      <div class="shard-card-top">
+        <div class="shard-id">SHARD ${s.shard_id}</div>
+        <div class="shard-db">shard_${s.shard_id}.db</div>
+      </div>
+      <div class="shard-count" id="sc-${s.shard_id}">0</div>
+      <div class="shard-label">users stored</div>
+      <div class="shard-bar-bg"><div class="shard-bar-fill" id="sb-${s.shard_id}" style="width:0%"></div></div>
+      <div class="shard-size" id="ss-${s.shard_id}">0 KB</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ── BUILD CHART ──────────────────────────────────────────────────────────────
+function buildChart() {
+  const ctx = document.getElementById('dist-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: shardData.map(s => `Shard ${s.shard_id}`),
+      datasets: [{
+        label: 'Users',
+        data: shardData.map(s => s.user_count),
+        backgroundColor: SHARD_COLORS,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#7b82b4', stepSize: 1 },
+          grid: { color: 'rgba(255,255,255,.05)' }
+        },
+        x: {
+          ticks: { color: '#7b82b4', font: { size: 11 } },
+          grid: { display: false }
+        }
+      }
+    }
+  });
+}
+
+// ── UPDATE UI FROM STATS ─────────────────────────────────────────────────────
+function updateShardUI(stats) {
+  const total = stats.reduce((s,x) => s + x.user_count, 0);
+  const max = Math.max(...stats.map(x=>x.user_count), 1);
+  document.getElementById('total-count').textContent = total;
+
+  stats.forEach(s => {
+    const old = shardData.find(x=>x.shard_id===s.shard_id);
+    const grew = old && s.user_count > old.user_count;
+
+    const countEl = document.getElementById(`sc-${s.shard_id}`);
+    const barEl   = document.getElementById(`sb-${s.shard_id}`);
+    const sizeEl  = document.getElementById(`ss-${s.shard_id}`);
+    const card    = document.getElementById(`shard-${s.shard_id}`);
+
+    if (countEl) countEl.textContent = s.user_count;
+    if (barEl)   barEl.style.width = Math.round((s.user_count/max)*100) + '%';
+    if (sizeEl)  sizeEl.textContent = s.db_size_kb + ' KB';
+
+    if (grew && card) {
+      card.classList.add('pulse');
+      countEl.classList.add('bump');
+      setTimeout(()=>{ card.classList.remove('pulse'); countEl.classList.remove('bump'); }, 700);
+    }
+  });
+
+  shardData = stats;
+  if (chart) {
+    chart.data.datasets[0].data = stats.map(s=>s.user_count);
+    chart.update('active');
+  }
+}
+
+// ── FLOW ANIMATION ───────────────────────────────────────────────────────────
+function animateFlow(shardId) {
+  const steps = [
+    { node:'fn-source', arrow:null,   delay:0 },
+    { node:'fn-router', arrow:'fa-1', delay:400 },
+    { node:'fn-shard',  arrow:'fa-2', delay:800 },
+  ];
+  ['fn-source','fn-router','fn-shard'].forEach(id=>{
+    document.getElementById(id).className='flow-node';
+  });
+  ['fa-1','fa-2'].forEach(id=>{ document.getElementById(id).className='flow-arrow'; });
+
+  document.getElementById('fn-shard-num').textContent = shardId;
+
+  steps.forEach(({node,arrow,delay}) => {
+    setTimeout(()=>{
+      if(arrow) document.getElementById(arrow).className='flow-arrow active';
+      document.getElementById(node).className='flow-node active';
+    }, delay);
+  });
+  setTimeout(()=>{
+    ['fn-source','fn-router','fn-shard'].forEach(id=>{
+      document.getElementById(id).className='flow-node done';
+    });
+    ['fa-1','fa-2'].forEach(id=>{ document.getElementById(id).className='flow-arrow active'; });
+  }, 1200);
+}
+
+// ── ID BREAKDOWN ─────────────────────────────────────────────────────────────
+function showBreakdown(data) {
+  const box = document.getElementById('id-breakdown');
+  box.classList.add('show');
+  // data.id is a string (preserved precision) — display as-is
+  document.getElementById('id-number').textContent = data.id;
+  const bd = data.id_breakdown;
+  document.getElementById('id-ts').textContent = bd.timestamp_ms;
+  document.getElementById('id-sh').textContent = bd.shard_id;
+  document.getElementById('id-sq').textContent = bd.sequence;
+}
+
+// ── FEED ─────────────────────────────────────────────────────────────────────
+function addFeedItem(type, data) {
+  const list = document.getElementById('feed-list');
+  if (feedEmpty) { list.innerHTML = ''; feedEmpty = false; }
+
+  const now = new Date().toLocaleTimeString();
+  const color = SHARD_COLORS[data.shard_id % 8];
+  const item = document.createElement('div');
+  item.className = `feed-item ${type}`;
+
+  if (type === 'success') {
+    item.innerHTML = `
+      <div class="feed-item-top">
+        <span class="feed-item-name">${data.username}</span>
+        <span class="feed-item-time">${now}</span>
+      </div>
+      <div class="feed-item-route">
+        📡 Source
+        <span class="arrow">→</span>
+        ⚙️ Router
+        <span class="arrow">→</span>
+        <span class="shard-chip" style="background:${color}">Shard ${data.shard_id}</span>
+      </div>
+      <div class="feed-item-id">ID: ${data.id}</div>
+    `;
+  } else if (type === 'error') {
+    item.innerHTML = `
+      <div class="feed-item-top">
+        <span class="feed-item-name" style="color:var(--red)">Error</span>
+        <span class="feed-item-time">${now}</span>
+      </div>
+      <div class="feed-item-route" style="color:var(--red)">${data.message}</div>
+    `;
+  } else {
+    item.innerHTML = `
+      <div class="feed-item-top">
+        <span class="feed-item-name" style="color:var(--accent)">${data.message}</span>
+        <span class="feed-item-time">${now}</span>
+      </div>
+    `;
+  }
+
+  list.insertBefore(item, list.firstChild);
+  if (list.children.length > 80) list.removeChild(list.lastChild);
+}
+
+function clearFeed() {
+  document.getElementById('feed-list').innerHTML =
+    '<div class="empty-feed"><div class="empty-feed-icon">📭</div>Feed cleared</div>';
+  feedEmpty = true;
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(()=>{ t.className = 'toast'; }, 2800);
+}
+
+// ── FETCH STATS ──────────────────────────────────────────────────────────────
+async function fetchStats() {
+  try {
+    const res = await fetch('/shards/stats');
+    const data = await res.json();
+    updateShardUI(data);
+  } catch(e) { /* silent */ }
+}
+
+// ── CREATE USER ──────────────────────────────────────────────────────────────
+async function createUser() {
+  const username  = document.getElementById('f-username').value.trim();
+  const email     = document.getElementById('f-email').value.trim();
+  const full_name = document.getElementById('f-fullname').value.trim();
+  const region    = document.getElementById('f-region').value;
+
+  if (!username || !email) { showToast('Username and email are required', 'err'); return; }
+
+  const btn = document.getElementById('btn-create');
+  btn.disabled = true; btn.textContent = '⏳ Routing…';
+
+  try {
+    const res = await fetch('/users/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, email, full_name: full_name||null, region: region||null})
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      addFeedItem('error', {message: data.detail || 'Failed'});
+      showToast(data.detail || 'Error creating user', 'err');
+    } else {
+      animateFlow(data.shard_id);
+      showBreakdown(data);
+      addFeedItem('success', data);
+      showToast(`✓ ${data.username} → Shard ${data.shard_id}`, 'ok');
+      await fetchStats();
+      // clear form
+      document.getElementById('f-username').value = '';
+      document.getElementById('f-email').value = '';
+      document.getElementById('f-fullname').value = '';
+      document.getElementById('f-region').value = '';
+    }
+  } catch(e) {
+    addFeedItem('error', {message: 'Network error'});
+    showToast('Network error', 'err');
+  }
+
+  btn.disabled = false; btn.innerHTML = '➕ Create User &amp; Watch Routing';
+}
+
+// ── SEARCH USER ──────────────────────────────────────────────────────────────
+async function searchUser() {
+  // Keep ID as raw string — never convert to JS Number.
+  // Snowflake IDs exceed Number.MAX_SAFE_INTEGER (2^53-1).
+  // parseInt() silently rounds them → wrong ID → "not found".
+  const id = document.getElementById('f-search-id').value.trim();
+  if (!id) { showToast('Enter a Snowflake ID', 'err'); return; }
+  if (!/^\d+$/.test(id)) { showToast('ID must be digits only', 'err'); return; }
+
+  try {
+    const res = await fetch(`/users/${id}`);
+    const data = await res.json();
+    const result = document.getElementById('search-result');
+    const body   = document.getElementById('search-result-body');
+
+    if (!res.ok) {
+      result.classList.remove('show');
+      showToast(data.detail || 'User not found', 'err');
+      showReverseBreakdown(id, null);
+      return;
+    }
+
+    result.classList.add('show');
+    body.innerHTML = `
+      <div class="search-result-row"><span class="search-result-key">Username</span><span class="search-result-val">${data.username}</span></div>
+      <div class="search-result-row"><span class="search-result-key">Email</span><span class="search-result-val">${data.email}</span></div>
+      <div class="search-result-row"><span class="search-result-key">Shard</span><span class="search-result-val" style="color:${SHARD_COLORS[data.shard_id]}">Shard ${data.shard_id}</span></div>
+      <div class="search-result-row"><span class="search-result-key">Region</span><span class="search-result-val">${data.region || '—'}</span></div>
+      <div class="search-result-row"><span class="search-result-key">Created</span><span class="search-result-val">${data.created_at.slice(0,19).replace('T',' ')}</span></div>
+    `;
+    animateFlow(data.shard_id);
+    showBreakdown(data);
+    showReverseBreakdown(id, data);
+    showToast(`Found in Shard ${data.shard_id}`, 'ok');
+  } catch(e) {
+    showToast('Network error', 'err');
+  }
+}
+
+function showReverseBreakdown(rawId, data) {
+  const box = document.getElementById('reverse-breakdown');
+  if (!box) return;
+  box.classList.add('show');
+
+  let ts = '—', sh = '—', sq = '—', shardIdx = '—';
+  try {
+    const big = BigInt(rawId);
+    const EPOCH_MS = 1704067200000n;
+    sq       = String(big & 0xFFFn);
+    sh       = String((big >> 12n) & 0x3FFn);
+    ts       = String((big >> 22n) + EPOCH_MS);
+    shardIdx = String(Number((big >> 12n) & 0x3FFn) % 8);
+  } catch(e) {}
+
+  const color = data ? SHARD_COLORS[data.shard_id] : '#888';
+  const found = data
+    ? `<span style="color:var(--green)">✓ Found: ${data.username}</span>`
+    : `<span style="color:var(--red)">✗ Not found in this shard's DB</span>`;
+
+  document.getElementById('reverse-breakdown-body').innerHTML = `
+    <div class="rb-step"><div class="rb-num">1</div><div class="rb-content">
+      <div class="rb-label">Input — kept as string, never a JS number</div>
+      <div class="rb-value mono">${rawId}</div>
+    </div></div>
+    <div class="rb-step"><div class="rb-num">2</div><div class="rb-content">
+      <div class="rb-label">Extract raw shard_id — bits [21..12]</div>
+      <div class="rb-code">id &gt;&gt; 12 &amp; 0x3FF &nbsp;=&nbsp; <strong>${sh}</strong></div>
+    </div></div>
+    <div class="rb-step"><div class="rb-num">3</div><div class="rb-content">
+      <div class="rb-label">Normalize to 8 active shards</div>
+      <div class="rb-code">${sh} % 8 &nbsp;=&nbsp; <strong style="color:${color}">Shard ${shardIdx}</strong></div>
+    </div></div>
+    <div class="rb-step"><div class="rb-num">4</div><div class="rb-content">
+      <div class="rb-label">Open shard_${shardIdx}.db → SELECT WHERE id = ?</div>
+      <div class="rb-code">${found}</div>
+    </div></div>
+    <div class="rb-step"><div class="rb-num">5</div><div class="rb-content">
+      <div class="rb-label">Timestamp decoded — bits [63..22]</div>
+      <div class="rb-code">Unix ms: <strong>${ts}</strong></div>
+    </div></div>
+    <div class="rb-step"><div class="rb-num">6</div><div class="rb-content">
+      <div class="rb-label">Sequence counter — bits [11..0]</div>
+      <div class="rb-code">burst position within same ms: <strong>${sq}</strong></div>
+    </div></div>
+  `;
+}
+
+// ── FAKE PROFILE GENERATOR ──────────────────────────────────────────────────
+const FIRST_NAMES = ['James','Emma','Liam','Olivia','Noah','Ava','William','Sophia',
+  'Benjamin','Isabella','Lucas','Mia','Henry','Charlotte','Alexander','Amelia','Mason',
+  'Harper','Ethan','Evelyn','Daniel','Abigail','Matthew','Emily','Aiden','Elizabeth',
+  'Logan','Sofia','Jackson','Avery','Sebastian','Ella','Jack','Scarlett','Owen','Grace',
+  'Samuel','Chloe','Ryan','Victoria','Nathan','Riley','Adrian','Aria','Elijah','Lily',
+  'Caleb','Zoey','Isaiah','Penelope','Nolan','Layla','Dylan','Nora','Julian','Hannah',
+  'Jayden','Lillian','Grayson','Addison','Wyatt','Aubrey','Hunter','Ellie','Connor','Stella'];
+
+const LAST_NAMES = ['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis',
+  'Rodriguez','Martinez','Hernandez','Lopez','Gonzalez','Wilson','Anderson','Thomas',
+  'Taylor','Moore','Jackson','Martin','Lee','Perez','Thompson','White','Harris','Sanchez',
+  'Clark','Ramirez','Lewis','Robinson','Walker','Young','Allen','King','Wright','Scott',
+  'Torres','Nguyen','Hill','Flores','Green','Adams','Nelson','Baker','Hall','Rivera',
+  'Campbell','Mitchell','Carter','Roberts','Patel','Sharma','Kumar','Chen','Zhang','Wang'];
+
+const DOMAINS = ['gmail.com','yahoo.com','outlook.com','hotmail.com','icloud.com',
+  'proton.me','fastmail.com','hey.com','duck.com','zoho.com'];
+
+const REGIONS = ['us-east','us-west','eu-west','ap-south','ap-east'];
+
+function fakePwd() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+  return Array.from({length: 14}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+function fakeProfile(idx) {
+  const first = FIRST_NAMES[Math.floor(Math.random()*FIRST_NAMES.length)];
+  const last  = LAST_NAMES[Math.floor(Math.random()*LAST_NAMES.length)];
+  const num   = Math.floor(Math.random()*9000+1000);
+  const domain= DOMAINS[Math.floor(Math.random()*DOMAINS.length)];
+  const region= REGIONS[Math.floor(Math.random()*REGIONS.length)];
+  const username = `${first.toLowerCase()}_${last.toLowerCase()}${num}`;
+  const email    = `${first.toLowerCase()}.${last.toLowerCase()}${num}@${domain}`;
+  const password = fakePwd();
+  return { username, email, full_name: `${first} ${last}`, region, password };
+}
+
+function setBulkCount(n) {
+  document.getElementById('bulk-count').value = n;
+}
+
+let bulkRunning = false;
+
+async function bulkCreateCustom() {
+  if (bulkRunning) return;
+  const n = parseInt(document.getElementById('bulk-count').value);
+  if (!n || n < 1) { showToast('Enter a valid number', 'err'); return; }
+  if (n > 5000) { showToast('Max 5,000 per batch', 'err'); return; }
+
+  bulkRunning = true;
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true; btn.textContent = '⏳ Running…';
+
+  const prog = document.getElementById('bulk-progress');
+  const bar  = document.getElementById('bulk-progress-bar');
+  const lbl  = document.getElementById('bulk-progress-label');
+  prog.style.display = 'block';
+  bar.style.width = '0%';
+
+  addFeedItem('info', {message: `🧪 Generating ${n.toLocaleString()} fake profiles…`});
+
+  let ok = 0, fail = 0;
+  const BATCH = n > 200 ? 10 : 5;  // parallel batch size
+
+  for (let i = 0; i < n; i += BATCH) {
+    const slice = Math.min(BATCH, n - i);
+    const promises = Array.from({length: slice}, (_, j) => {
+      const profile = fakeProfile(i + j);
+      return fetch('/users/', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          username:  profile.username,
+          email:     profile.email,
+          full_name: profile.full_name,
+          region:    profile.region
+        })
+      }).then(async res => {
+        if (res.ok) {
+          const data = await res.json();
+          ok++;
+          // show feed item for first 30 only to avoid flooding
+          if (ok <= 30) addFeedItem('success', data);
+          return data;
+        } else { fail++; }
+      }).catch(() => { fail++; });
+    });
+
+    await Promise.all(promises);
+
+    const pct = Math.round(((i + slice) / n) * 100);
+    bar.style.width = pct + '%';
+    lbl.textContent = `${(i + slice).toLocaleString()} / ${n.toLocaleString()} created (${pct}%)`;
+
+    // refresh stats every 50 users
+    if ((i + slice) % 50 === 0 || i + slice >= n) await fetchStats();
+
+    // tiny yield so UI stays responsive
+    await new Promise(r => setTimeout(r, 10));
+  }
+
+  await fetchStats();
+  prog.style.display = 'none';
+  const msg = `✓ ${ok.toLocaleString()} profiles created, ${fail} skipped`;
+  addFeedItem('info', {message: msg});
+  showToast(msg, 'ok');
+  bulkRunning = false;
+  btn.disabled = false; btn.textContent = '⚡ Generate';
+}
+
+// ── RESET ─────────────────────────────────────────────────────────────────────
+async function resetAll() {
+  if (!confirm('Delete all users from all shards?')) return;
+  try {
+    const res = await fetch('/users/');
+    const users = await res.json();
+    for (const u of users) {
+      await fetch(`/users/${u.id}`, {method:'DELETE'});
+    }
+    await fetchStats();
+    clearFeed();
+    addFeedItem('info', {message: '🗑 All users deleted'});
+    showToast('All shards cleared', 'ok');
+    document.getElementById('id-breakdown').classList.remove('show');
+    document.getElementById('search-result').classList.remove('show');
+  } catch(e) {
+    showToast('Reset failed', 'err');
+  }
+}
+
+// ── KEYBOARD SHORTCUT ─────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') createUser();
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+buildShards();
+buildChart();
+fetchStats();
+setInterval(fetchStats, 5000);
+</script>
+</body>
+</html>
